@@ -4,17 +4,25 @@ import plotly.express as px
 from data_processor import carregar_dados_upload, processar_dados
 from database import init_db, salvar_no_banco, carregar_do_banco, limpar_banco
 from ml_engine import treinar_modelo
+from forecasting import gerar_previsao
+
+# --- IMPORTS PARA O CHAT ---
+from pandasai import SmartDataframe
+from pandasai.llm import OpenAI
 
 # 1. Configuração Inicial da Página
 st.set_page_config(
     page_title="Finanças Pro",
+    page_icon="💰",
     layout="wide"
 )
 
-# Inicializa o banco de dados (Cria tabela se não existir)
+# Inicializa o banco de dados
 init_db()
 
-# Barra Lateral
+# ==============================================================================
+# SIDEBAR (Barra Lateral)
+# ==============================================================================
 with st.sidebar:
     st.header("📂 Importar Extratos")
     uploaded_files = st.file_uploader(
@@ -23,32 +31,30 @@ with st.sidebar:
         accept_multiple_files=True
     )
     
-    # Botão de Processamento
+    # Botão de Processamento (ETL)
     if uploaded_files:
         if st.button("Processar e Salvar no Banco"):
-            with st.spinner("Lendo arquivos e categorizando..."):
-                # 1. Carrega CSVs da memória
+            with st.spinner("Lendo arquivos, categorizando (IA) e salvando..."):
+                # 1. Lê os arquivos da memória
                 df_temp = carregar_dados_upload(uploaded_files)
                 
                 if not df_temp.empty:
-                    # 2. Processa (Limpeza + IA ou Regras)
+                    # 2. Processa (Limpeza + IA Naive Bayes)
                     df_proc = processar_dados(df_temp)
                     
                     # 3. Salva no SQLite
                     salvar_no_banco(df_proc)
                     
-                    st.success("✅ Dados importados com sucesso!")
-                    # Recarrega a página para atualizar os gráficos
+                    st.success("✅ Dados processados e salvos com sucesso!")
                     st.rerun()
 
     st.markdown("---")
     
-    # Seção de Machine Learning
+    # Seção Machine Learning (Treino)
     st.header("🧠 Inteligência Artificial")
-    st.markdown("Ensine a IA a categorizar seus gastos com base no seu histórico.")
-    
+    st.caption("Treine o modelo para categorizar automaticamente seus novos gastos.")
     if st.button("Treinar Novo Modelo"):
-        with st.spinner("A IA está estudando seu banco de dados..."):
+        with st.spinner("A IA está aprendendo com seu histórico..."):
             resultado = treinar_modelo()
             if "sucesso" in resultado:
                 st.success(f"✅ {resultado}")
@@ -56,25 +62,31 @@ with st.sidebar:
                 st.warning(f"⚠️ {resultado}")
 
     st.markdown("---")
+
+    # Configuração do Chat (Generative BI)
+    st.header("💬 Configuração do Chat")
+    st.caption("Insira sua API Key para conversar com os dados.")
+    openai_api_key = st.text_input("OpenAI API Key", type="password")
     
-    # Seção de Configuração
-    st.header("⚙️ Configurações")
-    if st.button("Limpar Banco de Dados"):
+    st.markdown("---")
+    
+    # Botão de Reset
+    st.header("⚙️ Admin")
+    if st.button("🗑️ Limpar Banco de Dados"):
         limpar_banco()
         st.warning("Banco de dados apagado!")
         st.rerun()
-        
-    st.markdown("---")
-    st.markdown("Desenvolvido por **Pedro Victor**")
 
-# Main
-st.title("Dashboard Financeiro")
+# ==============================================================================
+# ÁREA PRINCIPAL
+# ==============================================================================
+st.title("💸 Dashboard Financeiro (AI + SQL + Forecasting)")
 
-# Carrega os dados persistentes do SQLite
+# Carrega dados do Banco SQL
 df = carregar_do_banco()
 
 if not df.empty:
-    # Filtros
+    # --- FILTROS ---
     col_filtro1, col_filtro2 = st.columns(2)
     
     # Filtro de Ano
@@ -84,48 +96,46 @@ if not df.empty:
     
     # Filtro de Mês
     meses_disponiveis = df[df['ano'] == ano_selecionado]['mes'].unique()
-    # Ordem cronológica dos meses
+    # Tenta ordenar meses cronologicamente
     ordem_meses = ['January', 'February', 'March', 'April', 'May', 'June', 
                    'July', 'August', 'September', 'October', 'November', 'December']
     meses_ordenados = [m for m in ordem_meses if m in meses_disponiveis]
-    # Se a lista ordenada estiver vazia, usa o unique direto
-    if not meses_ordenados: 
-        meses_ordenados = meses_disponiveis
+    if not meses_ordenados: meses_ordenados = meses_disponiveis
 
     with col_filtro2:
         mes_selecionado = st.selectbox("Selecione o Mês", meses_ordenados)
     
-    # Aplica os filtros
+    # Aplica Filtros
     df_filtered = df[(df['ano'] == ano_selecionado) & (df['mes'] == mes_selecionado)]
 
-    # Vizualização
-    tab1, tab2 = st.tabs(["📊 Visão Gerencial", "📝 Extrato Detalhado"])
+    # --- ABAS (TABS) ---
+    tab1, tab2, tab3, tab4 = st.tabs(["📊 Visão Gerencial", "📝 Extrato", "🤖 Chat com Dados", "🔮 Previsões"])
 
+    # TAB 1: DASHBOARD
     with tab1:
-        # 1. KPIs
-        total_receitas = df_filtered[df_filtered['valor'] > 0]['valor'].sum()
-        total_despesas = df_filtered[df_filtered['valor'] < 0]['valor'].sum()
-        saldo = total_receitas + total_despesas
+        # KPIs
+        total_rec = df_filtered[df_filtered['valor'] > 0]['valor'].sum()
+        total_desp = df_filtered[df_filtered['valor'] < 0]['valor'].sum()
+        saldo = total_rec + total_desp
 
         c1, c2, c3 = st.columns(3)
-        c1.metric("Receitas", f"R$ {total_receitas:,.2f}", delta="Entradas")
-        c2.metric("Despesas", f"R$ {total_despesas:,.2f}", delta="-Saídas", delta_color="inverse")
-        c3.metric("Saldo do Mês", f"R$ {saldo:,.2f}", delta_color="normal")
+        c1.metric("Receitas", f"R$ {total_rec:,.2f}", delta="Entradas")
+        c2.metric("Despesas", f"R$ {total_desp:,.2f}", delta="-Saídas", delta_color="inverse")
+        c3.metric("Saldo Mensal", f"R$ {saldo:,.2f}", delta_color="normal")
 
         st.markdown("---")
 
-        # 2. Gráficos
+        # Gráficos
         col_g1, col_g2 = st.columns(2)
 
         with col_g1:
-            st.subheader("Despesas por Categoria")
-            df_despesas = df_filtered[df_filtered['valor'] < 0].copy()
-            df_despesas['valor'] = df_despesas['valor'].abs()
+            st.subheader("Onde gastei?")
+            df_desp = df_filtered[df_filtered['valor'] < 0].copy()
+            df_desp['valor'] = df_desp['valor'].abs()
             
-            if not df_despesas.empty:
-                # Gráfico de Rosca (Donut) usando px.pie com hole
+            if not df_desp.empty:
                 fig_pizza = px.pie(
-                    df_despesas, 
+                    df_desp, 
                     values='valor', 
                     names='categoria', 
                     hole=0.4,
@@ -133,38 +143,79 @@ if not df.empty:
                 )
                 st.plotly_chart(fig_pizza, use_container_width=True)
             else:
-                st.info("Nenhuma despesa registrada neste período.")
+                st.info("Sem despesas neste período.")
 
         with col_g2:
-            st.subheader("Evolução Anual (Receitas vs Despesas)")
-            # Agrupa dados do ano todo para ver a tendência
+            st.subheader("Receitas vs Despesas (Ano)")
             df_ano = df[df['ano'] == ano_selecionado].copy()
-            # Cria coluna de tipo para colorir o gráfico
             df_ano['tipo'] = df_ano['valor'].apply(lambda x: 'Receita' if x > 0 else 'Despesa')
             
-            df_evolucao = df_ano.groupby(['mes', 'tipo'])['valor'].sum().reset_index()
-            
+            df_evo = df_ano.groupby(['mes', 'tipo'])['valor'].sum().reset_index()
             fig_bar = px.bar(
-                df_evolucao, 
+                df_evo, 
                 x='mes', 
                 y='valor', 
-                color='tipo',
-                barmode='group', # Barras lado a lado
+                color='tipo', 
+                barmode='group',
                 color_discrete_map={'Receita': 'green', 'Despesa': 'red'}
             )
             st.plotly_chart(fig_bar, use_container_width=True)
 
+    # TAB 2: EXTRATO
     with tab2:
-        st.markdown("### 📄 Dados das Transações")
         st.dataframe(df_filtered, use_container_width=True)
 
+    # TAB 3: CHAT (PandasAI)
+    with tab3:
+        st.header("🤖 Consultor Financeiro IA")
+        st.markdown("Faça perguntas como: *'Qual categoria teve maior aumento em relação ao mês passado?'*")
+        
+        if not openai_api_key:
+            st.warning("⚠️ Insira sua OpenAI API Key na barra lateral para ativar.")
+        else:
+            pergunta = st.text_area("Digite sua pergunta:")
+            if st.button("Enviar"):
+                if pergunta:
+                    with st.spinner("Analisando dados..."):
+                        try:
+                            llm = OpenAI(api_token=openai_api_key)
+                            # Passamos o DF completo para ele ter contexto histórico
+                            sdf = SmartDataframe(df, config={"llm": llm})
+                            resposta = sdf.chat(pergunta)
+                            
+                            st.write("### Resposta:")
+                            st.write(resposta)
+                            
+                            # Se for gráfico
+                            if isinstance(resposta, str) and ".png" in resposta:
+                                st.image(resposta)
+                        except Exception as e:
+                            st.error(f"Erro na IA: {e}")
+
+    # TAB 4: PREVISÕES (FORECASTING)
+    with tab4:
+        st.header("🔮 Bola de Cristal Financeira")
+        st.markdown("Projeção de gastos para os próximos 3 meses baseada em regressão linear.")
+        
+        if st.button("Gerar Previsão"):
+            with st.spinner("Calculando tendências..."):
+                resultado = gerar_previsao()
+                
+                if isinstance(resultado, str):
+                    # Se retornou string, é mensagem de erro (ex: dados insuficientes)
+                    st.warning(resultado)
+                elif resultado:
+                    # Se retornou objeto gráfico Plotly
+                    st.plotly_chart(resultado, use_container_width=True)
+                    st.success("Previsão gerada com sucesso!")
+
 else:
-    # Estado Vazio (Empty State)
+    # Empty State (Tela Inicial)
     st.info("👋 Bem-vindo ao Finanças Pro!")
     st.markdown("""
-        ### Como começar:
-        1. Prepare seu extrato bancário em formato **CSV** (`Data`, `Descricao`, `Valor`).
-        2. Arraste o arquivo para a barra lateral esquerda.
-        3. Clique em **"Processar e Salvar no Banco"**.
-        4. (Opcional) Clique em **"Treinar Novo Modelo"** para a IA aprender seus padrões.
+        ### Como usar:
+        1. Gere dados de teste com `python gerador_dados.py` ou use seus CSVs.
+        2. Arraste para a **sidebar** e clique em **Processar**.
+        3. Treine a IA para categorização automática.
+        4. Explore os gráficos, chat e previsões.
     """)
