@@ -28,18 +28,15 @@ def categorizar_despesa(descricao):
         return 'Outros'
 
 def processar_dados(df):
-    # Tratamento de erros básico se o CSV estiver vazio
     if df.empty:
         return df
 
-    # Converte coluna de data
     df['Data'] = pd.to_datetime(df['Data'])
-    
-    # Categorização
     df['Categoria'] = df['Descricao'].apply(categorizar_despesa)
-    
-    # Colunas de Tempo
     df['Mes'] = df['Data'].dt.month_name()
     df['Ano'] = df['Data'].dt.year
+    
+    # Renomear colunas para minúsculo (Padrão SQL)
+    df.columns = ['data', 'descricao', 'valor', 'categoria', 'mes', 'ano']
     
     return df

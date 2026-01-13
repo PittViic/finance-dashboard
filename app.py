@@ -2,110 +2,97 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from data_processor import carregar_dados_upload, processar_dados
+from database import init_db, salvar_no_banco, carregar_do_banco, limpar_banco
 
-# 1. Configuração da Página (Deve ser a primeira linha)
-st.set_page_config(
-    page_title="Finanças Pro",
-    page_icon="💸",
-    layout="wide"
-)
+# 1. Configuração Inicial
+st.set_page_config(page_title="Finanças Pro", page_icon="💰", layout="wide")
 
-# 2. Sidebar (Barra Lateral) de Configuração
+# Inicializa o banco de dados
+init_db()
+
+# 2. Sidebar
 with st.sidebar:
-    st.header("📂 Carregar Dados")
-    uploaded_files = st.file_uploader(
-        "Arraste seus extratos (CSV) aqui:", 
-        type=['csv'], 
-        accept_multiple_files=True
-    )
+    st.header("📂 Importar Dados")
+    uploaded_files = st.file_uploader("Adicionar Extratos (CSV):", type=['csv'], accept_multiple_files=True)
     
+    # Botão para processar o upload
+    if uploaded_files:
+        if st.button("Processar e Salvar no Banco"):
+            with st.spinner("Processando..."):
+                df_temp = carregar_dados_upload(uploaded_files)
+                if not df_temp.empty:
+                    df_proc = processar_dados(df_temp)
+                    salvar_no_banco(df_proc)
+                    st.success("Dados adicionados com sucesso!")
+                    # Rerun para atualizar os gráficos imediatamente
+                    st.rerun()
+
     st.markdown("---")
-    st.markdown("### ℹ️ Sobre")
-    st.markdown("Dashboard desenvolvido para análise financeira pessoal automatizada.")
-    st.markdown("Desenvolvido por **Pedro Victor**")
+    st.header("⚙️ Configurações")
+    if st.button("Limpar Banco de Dados"):
+        limpar_banco()
+        st.warning("Banco de dados apagado!")
+        st.rerun()
 
-# 3. Título Principal
-st.title("Dashboard Financeiro Inteligente")
+# 3. Carregamento dos Dados REAIS (Do Banco)
+df = carregar_do_banco()
 
-# 4. Lógica Principal
-if uploaded_files:
-    # Processamento
-    df_raw = carregar_dados_upload(uploaded_files)
-    df = processar_dados(df_raw)
+st.title("💰 Dashboard Financeiro (SQL Edition)")
+
+# 4. Verifica se tem dados no banco para mostrar
+if not df.empty:
     
-    # Filtros na Sidebar (só aparecem após upload)
-    st.sidebar.header("Filtros")
-    todos_meses = df['Mes'].unique()
-    mes_selecionado = st.sidebar.selectbox("Selecione o Mês", todos_meses)
+    # --- FILTROS INTELIGENTES ---
+    # Garantir que a ordenação dos meses esteja correta pode ser chato, 
+    # vamos pegar lista de Anos e Meses disponíveis
+    anos = sorted(df['ano'].unique(), reverse=True)
+    ano_selecionado = st.sidebar.selectbox("Ano", anos)
     
-    # Filtrar dados
-    df_filtered = df[df['Mes'] == mes_selecionado]
+    meses_disponiveis = df[df['ano'] == ano_selecionado]['mes'].unique()
+    mes_selecionado = st.sidebar.selectbox("Mês", meses_disponiveis)
+    
+    # Filtra o DataFrame principal
+    df_filtered = df[(df['ano'] == ano_selecionado) & (df['mes'] == mes_selecionado)]
 
-    # --- INÍCIO DO LAYOUT DE ABAS ---
-    tab1, tab2 = st.tabs(["📊 Visão Geral", "📝 Extrato Detalhado"])
+    # --- DASHBOARD (Igual ao anterior, mas agora alimentado via SQL) ---
+    tab1, tab2 = st.tabs(["📊 Dashboard", "📝 Dados Brutos"])
 
     with tab1:
-        # Seção de KPIs (Indicadores)
-        total_receitas = df_filtered[df_filtered['Valor'] > 0]['Valor'].sum()
-        total_despesas = df_filtered[df_filtered['Valor'] < 0]['Valor'].sum()
+        # KPIs
+        total_receitas = df_filtered[df_filtered['valor'] > 0]['valor'].sum()
+        total_despesas = df_filtered[df_filtered['valor'] < 0]['valor'].sum()
         saldo = total_receitas + total_despesas
 
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Entradas", f"R$ {total_receitas:,.2f}", delta="Receitas")
-        col2.metric("Saídas", f"R$ {total_despesas:,.2f}", delta="-Despesas", delta_color="inverse")
-        col3.metric("Saldo Mensal", f"R$ {saldo:,.2f}", delta_color="normal")
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Receitas", f"R$ {total_receitas:,.2f}")
+        c2.metric("Despesas", f"R$ {total_despesas:,.2f}")
+        c3.metric("Saldo", f"R$ {saldo:,.2f}")
 
-        st.markdown("---")
-
-        # Gráficos Lado a Lado
-        col_g1, col_g2 = st.columns(2)
-
-        with col_g1:
-            st.subheader("Onde estou gastando?")
-            df_despesas = df_filtered[df_filtered['Valor'] < 0].copy()
-            df_despesas['Valor'] = df_despesas['Valor'].abs()
+        # Gráficos
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.subheader("Por Categoria")
+            df_despesas = df_filtered[df_filtered['valor'] < 0].copy()
+            df_despesas['valor'] = df_despesas['valor'].abs()
             
             if not df_despesas.empty:
-                # CORREÇÃO AQUI: Mudamos de px.donut para px.pie
-                fig_pizza = px.pie(
-                    df_despesas, 
-                    values='Valor', 
-                    names='Categoria', 
-                    hole=0.4, # O 'hole' é o que transforma a pizza em rosca
-                    color_discrete_sequence=px.colors.qualitative.Pastel
-                )
-                st.plotly_chart(fig_pizza, use_container_width=True)
-            else:
-                st.info("Sem despesas registradas neste mês.")
-
-        with col_g2:
-            st.subheader("Fluxo de Caixa Diário")
-            df_evolucao = df_filtered.groupby('Data')['Valor'].sum().reset_index()
+                fig = px.pie(df_despesas, values='valor', names='categoria', hole=0.4)
+                st.plotly_chart(fig, use_container_width=True)
+        
+        with col2:
+            st.subheader("Evolução Mensal")
+            # Aqui podemos pegar o ano todo para ver a evolução
+            df_ano = df[df['ano'] == ano_selecionado]
+            df_evolucao = df_ano.groupby('mes')['valor'].sum().reindex(
+                ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+            ).reset_index()
             
-            fig_bar = px.bar(
-                df_evolucao, 
-                x='Data', 
-                y='Valor', 
-                color='Valor',
-                color_continuous_scale=['red', 'green']
-            )
-            st.plotly_chart(fig_bar, use_container_width=True)
+            fig2 = px.bar(df_evolucao, x='mes', y='valor')
+            st.plotly_chart(fig2, use_container_width=True)
 
     with tab2:
-        st.markdown("### Histórico de Transações")
-        # Mostra a tabela com opção de download nativa do Streamlit
-        st.dataframe(df_filtered, use_container_width=True)
+        st.dataframe(df_filtered)
 
 else:
-    # Tela de Boas-vindas (Empty State)
-    st.info("Bem-vindo! Por favor, faça o upload dos arquivos CSV na barra lateral para começar.")
-    st.markdown("""
-    ### Formato esperado do CSV:
-    O arquivo deve conter as colunas: `Data`, `Descricao`, `Valor`.
-    
-    Exemplo:
-    | Data | Descricao | Valor |
-    | :--- | :--- | :--- |
-    | 2024-01-10 | Uber | -20.00 |
-    | 2024-01-11 | Salario | 3000.00 |
-    """)
+    st.info("O banco de dados está vazio. Faça o upload de arquivos CSV na barra lateral.")
