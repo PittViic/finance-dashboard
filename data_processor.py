@@ -1,12 +1,12 @@
 import pandas as pd
 
+# ATENÇÃO AQUI: O nome da função deve ser este
 def carregar_dados_upload(arquivos):
     if not arquivos:
         return pd.DataFrame()
     
     df_list = []
     for arquivo in arquivos:
-        # O Streamlit envia um objeto tipo arquivo, o Pandas lê direto
         df = pd.read_csv(arquivo)
         df_list.append(df)
     
@@ -15,7 +15,6 @@ def carregar_dados_upload(arquivos):
 
 def categorizar_despesa(descricao):
     descricao = str(descricao).lower()
-    # Regras simples (Futuramente substituiremos por ML)
     if 'uber' in descricao or '99' in descricao or 'posto' in descricao:
         return 'Transporte'
     elif 'ifood' in descricao or 'restaurante' in descricao or 'mercado' in descricao:
@@ -28,17 +27,11 @@ def categorizar_despesa(descricao):
         return 'Outros'
 
 def processar_dados(df):
-    # Tratamento de erros básico se o CSV estiver vazio
     if df.empty:
         return df
 
-    # Converte coluna de data
     df['Data'] = pd.to_datetime(df['Data'])
-    
-    # Categorização
     df['Categoria'] = df['Descricao'].apply(categorizar_despesa)
-    
-    # Colunas de Tempo
     df['Mes'] = df['Data'].dt.month_name()
     df['Ano'] = df['Data'].dt.year
     
