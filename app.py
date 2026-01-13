@@ -13,16 +13,13 @@ from pandasai.llm import OpenAI
 # 1. Configuração Inicial da Página
 st.set_page_config(
     page_title="Finanças Pro",
-    page_icon="💰",
     layout="wide"
 )
 
 # Inicializa o banco de dados
 init_db()
 
-# ==============================================================================
-# SIDEBAR (Barra Lateral)
-# ==============================================================================
+# Sidebar
 with st.sidebar:
     st.header("📂 Importar Extratos")
     uploaded_files = st.file_uploader(
@@ -77,16 +74,14 @@ with st.sidebar:
         st.warning("Banco de dados apagado!")
         st.rerun()
 
-# ==============================================================================
-# ÁREA PRINCIPAL
-# ==============================================================================
-st.title("💸 Dashboard Financeiro (AI + SQL + Forecasting)")
+# Área Principal
+st.title("Dashboard Financeiro")
 
 # Carrega dados do Banco SQL
 df = carregar_do_banco()
 
 if not df.empty:
-    # --- FILTROS ---
+    # FILTROS
     col_filtro1, col_filtro2 = st.columns(2)
     
     # Filtro de Ano
@@ -108,7 +103,7 @@ if not df.empty:
     # Aplica Filtros
     df_filtered = df[(df['ano'] == ano_selecionado) & (df['mes'] == mes_selecionado)]
 
-    # --- ABAS (TABS) ---
+    # ABAS
     tab1, tab2, tab3, tab4 = st.tabs(["📊 Visão Gerencial", "📝 Extrato", "🤖 Chat com Dados", "🔮 Previsões"])
 
     # TAB 1: DASHBOARD
