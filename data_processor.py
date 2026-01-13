@@ -1,6 +1,7 @@
 import pandas as pd
+# Importamos a função de previsão da IA
+from ml_engine import prever_categoria_ml
 
-# ATENÇÃO AQUI: O nome da função deve ser este
 def carregar_dados_upload(arquivos):
     if not arquivos:
         return pd.DataFrame()
@@ -14,6 +15,12 @@ def carregar_dados_upload(arquivos):
     return dados
 
 def categorizar_despesa(descricao):
+    # 1. TENTA USAR A INTELIGÊNCIA ARTIFICIAL
+    categoria_ml = prever_categoria_ml(descricao)
+    if categoria_ml:
+        return categoria_ml
+    
+    # 2. SE NÃO TIVER IA, USA AS REGRAS MANUAIS (FALLBACK)
     descricao = str(descricao).lower()
     if 'uber' in descricao or '99' in descricao or 'posto' in descricao:
         return 'Transporte'
@@ -35,7 +42,5 @@ def processar_dados(df):
     df['Mes'] = df['Data'].dt.month_name()
     df['Ano'] = df['Data'].dt.year
     
-    # Renomear colunas para minúsculo (Padrão SQL)
     df.columns = ['data', 'descricao', 'valor', 'categoria', 'mes', 'ano']
-    
     return df
