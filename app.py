@@ -8,7 +8,6 @@ from ml_engine import treinar_modelo
 # 1. Configuração Inicial da Página
 st.set_page_config(
     page_title="Finanças Pro",
-    page_icon="💰",
     layout="wide"
 )
 
@@ -60,7 +59,7 @@ with st.sidebar:
     
     # Seção de Configuração
     st.header("⚙️ Configurações")
-    if st.button("🗑️ Limpar Banco de Dados"):
+    if st.button("Limpar Banco de Dados"):
         limpar_banco()
         st.warning("Banco de dados apagado!")
         st.rerun()
@@ -69,7 +68,7 @@ with st.sidebar:
     st.markdown("Desenvolvido por **Pedro Victor**")
 
 # Main
-st.title("💸 Dashboard Financeiro (AI + SQL)")
+st.title("Dashboard Financeiro")
 
 # Carrega os dados persistentes do SQLite
 df = carregar_do_banco()
