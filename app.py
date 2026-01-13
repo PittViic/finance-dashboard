@@ -7,8 +7,8 @@ from ml_engine import treinar_modelo
 from forecasting import gerar_previsao
 
 # --- IMPORTS PARA O CHAT ---
-from pandasai import SmartDataframe
-from pandasai.llm import OpenAI
+# from pandasai import SmartDataframe
+# from pandasai.llm import OpenAI
 
 # 1. Configuração Inicial da Página
 st.set_page_config(
@@ -166,6 +166,7 @@ if not df.empty:
         st.dataframe(df_filtered, use_container_width=True)
 
     # TAB 3: CHAT (PandasAI)
+    '''
     with tab3:
         st.header("🤖 Consultor Financeiro IA")
         st.markdown("Faça perguntas como: *'Qual categoria teve maior aumento em relação ao mês passado?'*")
@@ -191,6 +192,7 @@ if not df.empty:
                                 st.image(resposta)
                         except Exception as e:
                             st.error(f"Erro na IA: {e}")
+        '''
 
     # TAB 4: PREVISÕES (FORECASTING)
     with tab4:
